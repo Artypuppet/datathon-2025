@@ -1,0 +1,70 @@
+# Full Environment for AWS Training/Production
+# Use this when deploying to AWS SageMaker/EC2
+# Includes GPU support and production tools
+
+name: datathon-aws
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python
+  - python=3.11
+  
+  # Data Handling
+  - pandas=2.1.4
+  - numpy=1.26.2
+  
+  # HTML/XML Parsing
+  - beautifulsoup4=4.12.2
+  - lxml=4.9.3
+  - requests=2.31.0
+  
+  # NLP - Full version with GPU support
+  - spacy=3.7.2
+  
+  # Language detection
+  - langdetect=1.0.9
+  
+  # ML/DL with GPU support
+  - pytorch=2.1.2
+  - pytorch-cuda=12.1
+  - transformers=4.36.2
+  
+  # AWS Tools
+  - boto3=1.34.22
+  - awscli=1.32.22
+  
+  # Production utilities
+  - gunicorn=21.2.0
+  - supervisor=4.2.5
+  
+  # Monitoring
+  - prometheus-client=0.19.0
+  
+  # Pip packages
+  - pip=23.3.1
+  - pip:
+      # SEC Filing Parsers
+      - git+https://github.com/alphanome-ai/sec-parser.git
+            
+      # Embeddings (GPU-accelerated)
+      - sentence-transformers==2.2.2
+      
+      # AWS OpenSearch
+      - opensearch-py==2.4.2
+      
+      # SageMaker SDK
+      - sagemaker==2.199.0
+      
+      # Utilities
+      - python-dotenv==1.0.0
+      - jsonschema==4.20.0
+      - colorlog==6.8.0
+
+# Installation instructions:
+# 1. conda env create -f environment-aws.yml
+# 2. conda activate datathon-aws
+# 3. python -m spacy download en_core_web_lg  # Larger model for production
+

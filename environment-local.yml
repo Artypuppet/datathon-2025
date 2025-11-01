@@ -1,0 +1,75 @@
+# Local Development Environment with GPU Support
+# Includes GPU-enabled PyTorch for faster local embeddings
+# Use this for parsing, testing, embeddings, and dashboard development
+
+name: datathon-local
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  # Python
+  - python=3.11
+  
+  # Data Handling (lightweight)
+  - pandas=2.1.4
+  - numpy=1.26.2
+  
+  # HTML/XML Parsing (no heavy ML)
+  - beautifulsoup4=4.12.2
+  - lxml=4.9.3
+  - requests=2.31.0
+  
+  # NLP
+  - spacy=3.7.2
+  
+  # Language detection
+  - langdetect=1.0.9
+  
+  # Dashboard
+  - streamlit=1.29.0
+  - plotly=5.18.0
+  - altair=5.2.0
+  
+  # Testing
+  - pytest=7.4.3
+  - pytest-cov=4.1.0
+  - pytest-mock=3.12.0
+  
+  # Utilities
+  - python-dotenv=1.0.0
+  - pyyaml=6.0.1
+  - jsonschema=4.20.0
+  
+  # AWS SDK
+  - boto3=1.34.10
+  
+  # Pip packages
+  - pip=23.3.1
+  - pip:
+      # SEC Filing Parsers
+      - git+https://github.com/alphanome-ai/sec-parser.git
+            
+      # Embeddings with GPU support
+      # Note: PyTorch with CUDA will be installed via separate pip command
+      # because conda's pip integration doesn't handle --index-url properly
+      - sentence-transformers==2.2.2
+      - transformers==4.36.2
+      
+      # Local vector DB (instead of OpenSearch)
+      - chromadb==0.4.22
+      
+      # Logging
+      - colorlog==6.8.0
+
+# Installation instructions:
+# 1. Check your CUDA version: nvidia-smi (look for CUDA Version)
+# 2. conda env create -f environment-local.yml
+# 3. conda activate datathon-local
+# 4. Install PyTorch with GPU support (choose one):
+#    For CUDA 11.8: pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+#    For CUDA 12.1: pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu121
+#    For CPU only:  pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+# 5. python -m spacy download en_core_web_sm
+# 6. Verify GPU: python check_gpu.py
+
