@@ -46,8 +46,14 @@ class CSVParser(BaseParser):
             # Normalize column names
             df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
             
-            # Determine data type from filename
+            # Determine data type from filename first
             data_type = self._detect_data_type(file_path.name)
+            
+            # If filename detection failed, try column-based detection
+            if data_type == 'unknown':
+                data_type = self._detect_data_type_from_columns(df)
+                if data_type != 'unknown':
+                    logger.info(f"[INFO] Detected CSV type from columns: {data_type}")
             
             # Parse based on type
             if data_type == 'composition':
@@ -108,6 +114,22 @@ class CSVParser(BaseParser):
             return 'composition'
         elif 'performance' in filename_lower or 'stocks' in filename_lower:
             return 'performance'
+        return 'unknown'
+    
+    def _detect_data_type_from_columns(self, df: pd.DataFrame) -> str:
+        """Detect CSV type based on column names."""
+        columns = set(df.columns.str.lower())
+        
+        # Composition files have: symbol, company, weight, price
+        composition_cols = {'symbol', 'company', 'weight', 'price'}
+        if composition_cols.issubset(columns):
+            return 'composition'
+        
+        # Performance files have: symbol, company_name, market_cap, revenue, etc.
+        performance_cols = {'symbol', 'company_name', 'market_cap', 'revenue'}
+        if performance_cols.issubset(columns):
+            return 'performance'
+        
         return 'unknown'
     
     def _parse_composition(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
