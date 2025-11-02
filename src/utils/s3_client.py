@@ -9,9 +9,10 @@ from typing import Optional, List, Dict, Any
 import json
 from io import BytesIO, StringIO
 import os
-
+from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
 
+load_dotenv()
 
 class S3Client:
     """

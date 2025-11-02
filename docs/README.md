@@ -7,6 +7,8 @@ Complete documentation for the PolyFinances Datathon 2025 project.
 - **[Quick Start Guide](QUICK_START.md)** - Get up and running in 5 minutes
 - **[Setup Environment](../.cursor/04_setup_environment.md)** - Detailed environment setup
 - **[AWS Setup Guide](AWS_SETUP_GUIDE.md)** - AWS credentials and S3 configuration
+- **[Pipeline Overview](PIPELINE_OVERVIEW.md)** - Pipeline architecture and usage
+- **[Dashboard Guide](RUN_DASHBOARD.md)** - Running the Streamlit dashboard
 - **[Testing Guide](TESTING.md)** - How to run and write tests
 - **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
 
