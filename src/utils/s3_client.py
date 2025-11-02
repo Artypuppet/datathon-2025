@@ -201,7 +201,8 @@ class S3Client:
             True if successful, False otherwise
         """
         try:
-            json_str = json.dumps(data, indent=indent)
+            # ensure_ascii=False preserves UTF-8 characters (e.g., é, ü, 法)
+            json_str = json.dumps(data, indent=indent, ensure_ascii=False)
             return self.write_text(json_str, s3_key)
         except Exception as e:
             logger.error(f"[ERROR] JSON serialization failed: {e}")

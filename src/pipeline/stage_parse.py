@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from ..parsers import ParserRunner
+from ..parsers.base import DocumentType
 from ..utils import get_s3_client, S3Client
 
 logger = logging.getLogger(__name__)
@@ -60,11 +61,22 @@ class ParseStage:
         
         # Parse the file from S3
         try:
+            # Get document_type from context if provided
+            document_type = None
+            if 'document_type' in context:
+                doc_type_str = context['document_type']
+                # Convert string to DocumentType enum if needed
+                try:
+                    document_type = DocumentType[doc_type_str.upper()]
+                except (KeyError, AttributeError):
+                    pass
+            
             data = self.runner.parse_s3_file(
                 s3_key=file_key,
                 save_to_s3=True,
                 s3_output_prefix="parsed/",
-                save_locally=False
+                save_locally=False,
+                document_type=document_type
             )
             
             if data:

@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional
 
 from .config import PipelineConfig
 from .stage_parse import ParseStage
+from .stage_embed import EmbeddingStage
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,11 @@ class PipelineOrchestrator:
         
         # Initialize stages
         self.parse_stage = ParseStage()
+        
+        # Initialize embedding stage if not skipped
+        self.embedding_stage = None
+        if not self.config.skip_embeddings:
+            self.embedding_stage = EmbeddingStage()
         
         logger.info(f"[INFO] PipelineOrchestrator initialized")
         logger.info(f"[INFO] Config: dry_run={self.config.dry_run}, skip_embeddings={self.config.skip_embeddings}")
@@ -50,6 +56,10 @@ class PipelineOrchestrator:
             'timestamp': event.get('timestamp'),
             'dry_run': self.config.dry_run,
         }
+        
+        # Pass through document_type if provided
+        if 'document_type' in event:
+            context['document_type'] = event['document_type']
         
         # Validate input
         if not context['file_key']:
@@ -76,14 +86,33 @@ class PipelineOrchestrator:
             logger.error(f"[ERROR] Parse stage failed: {e}", exc_info=True)
             return self._error_result(f"Parse failed: {str(e)}", context)
         
-        # Stage 2: Embeddings (skipped in MVP)
+        # Stage 2: Embeddings
         if self.config.skip_embeddings:
             logger.info("[INFO] Skipping embeddings (MVP mode)")
             context['embeddings_status'] = 'skipped'
         else:
-            # Future: Embeddings stage
-            logger.warning("[WARN] Embeddings stage not implemented")
-            context['embeddings_status'] = 'not_implemented'
+            try:
+                if self.config.dry_run:
+                    logger.info("[DRY RUN] Would execute Stage 2: Embeddings")
+                    context.update({
+                        'embedding_status': 'dry_run',
+                        'embedding_key': f"embeddings/{Path(context['parsed_key']).stem}_embedded.json (would be created)"
+                    })
+                else:
+                    if not self.embedding_stage:
+                        logger.warning("[WARN] Embedding stage not initialized")
+                        context['embeddings_status'] = 'skipped'
+                    elif not self.embedding_stage.can_execute(context):
+                        logger.warning("[WARN] Embedding stage cannot execute (missing dependencies)")
+                        context['embeddings_status'] = 'skipped'
+                    else:
+                        context = self.embedding_stage.execute(context)
+                        
+            except Exception as e:
+                logger.error(f"[ERROR] Embedding stage failed: {e}", exc_info=True)
+                # Don't fail entire pipeline if embeddings fail
+                context['embeddings_status'] = 'failed'
+                context['embedding_error'] = str(e)
         
         # Stage 3: Database update (skipped in MVP)
         if self.config.skip_embeddings:
@@ -129,6 +158,7 @@ class PipelineOrchestrator:
             'status': 'dry_run',
             'file_key': context['file_key'],
             'parsed_key': context.get('parsed_key'),
+            'document_type': context.get('document_type'),
             'message': 'Would process embeddings and update database',
             'stages': {
                 'parse': 'would_execute',

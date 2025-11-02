@@ -222,7 +222,7 @@ class HTMLFilingParser(BaseParser):
                 return {
                     "section_id": section_id,
                     "title": title,
-                    "text": section_text[:10000],  # Limit to 10k chars for MVP
+                    "text": section_text,  # No truncation limit
                     "subsections": [],
                     "tables": [],
                     "word_count": len(section_text.split()),
@@ -250,7 +250,7 @@ class HTMLFilingParser(BaseParser):
                 sections.append({
                     "section_id": f"block_{i}",
                     "title": f"Text Block {i+1}",
-                    "text": self._clean_text(text)[:10000],
+                    "text": self._clean_text(text),  # No truncation limit
                     "subsections": [],
                     "tables": [],
                     "word_count": len(text.split()),

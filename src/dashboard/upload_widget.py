@@ -10,6 +10,7 @@ from datetime import datetime
 
 from ..utils import get_s3_client, S3Client
 from ..pipeline import PipelineOrchestrator, PipelineConfig
+from ..parsers.base import DocumentType
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,21 @@ class FileUploadWidget:
             st.divider()
             st.write("**Processing Options**")
             
+            # Document type selector
+            st.write("**Document Type**")
+            document_type_selection = st.selectbox(
+                "Select document type",
+                options=[
+                    "Auto-detect",
+                    "Stock Data (CSV)",
+                    "Company Filing (10-K/10-Q)",
+                    "Legislation (Regulation/Law)"
+                ],
+                index=0,
+                help="Select the type of document being uploaded. Auto-detect will try to infer from filename.",
+                key="doc_type_selector"
+            )
+            
             col1, col2 = st.columns(2)
             with col1:
                 dry_run = st.checkbox(
@@ -108,7 +124,7 @@ class FileUploadWidget:
             
             # Upload button (only show if file is uploaded and not already successful)
             if st.button("Upload", type="primary", use_container_width=True, key="upload_btn", ):
-                result = self._handle_upload(file_bytes, uploaded_file.name, dry_run, auto_process)
+                result = self._handle_upload(file_bytes, uploaded_file.name, dry_run, auto_process, document_type_selection)
                 
                 # Mark success if upload/processing worked
                 if result.get('status') in ['success', 'uploaded', 'dry_run']:
@@ -144,7 +160,8 @@ class FileUploadWidget:
         file_bytes: bytes,
         file_name: str,
         dry_run: bool = False,
-        auto_process: bool = True
+        auto_process: bool = True,
+        document_type_selection: str = "Auto-detect"
     ) -> Dict[str, Any]:
         """
         Handle file upload to S3.
@@ -154,6 +171,7 @@ class FileUploadWidget:
             file_name: Original filename
             dry_run: Whether to run in dry run mode
             auto_process: Whether to auto-trigger pipeline
+            document_type_selection: User-selected document type
             
         Returns:
             Upload result dictionary
@@ -175,7 +193,7 @@ class FileUploadWidget:
         
         # Auto-process if requested
         if auto_process:
-            return self._trigger_pipeline(s3_key, dry_run)
+            return self._trigger_pipeline(s3_key, dry_run, document_type_selection)
         else:
             return {
                 'status': 'uploaded',
@@ -187,7 +205,8 @@ class FileUploadWidget:
     def _trigger_pipeline(
         self,
         file_key: str,
-        dry_run: bool = False
+        dry_run: bool = False,
+        document_type_selection: str = "Auto-detect"
     ) -> Dict[str, Any]:
         """
         Trigger processing pipeline.
@@ -195,6 +214,7 @@ class FileUploadWidget:
         Args:
             file_key: S3 key of uploaded file
             dry_run: Whether to run in dry run mode
+            document_type_selection: User-selected document type
             
         Returns:
             Pipeline result dictionary
@@ -208,12 +228,27 @@ class FileUploadWidget:
         # Create orchestrator
         orchestrator = PipelineOrchestrator(config=config)
         
+        # Map user selection to DocumentType if not auto-detect
+        document_type_name = None
+        if document_type_selection != "Auto-detect":
+            # Map UI selection to DocumentType
+            selection_map = {
+                "Stock Data (CSV)": "CSV_FINANCIAL",
+                "Company Filing (10-K/10-Q)": "HTML_FILING",
+                "Legislation (Regulation/Law)": "HTML_LEGISLATION"
+            }
+            document_type_name = selection_map.get(document_type_selection)
+        
         # Build event
         event = {
             'file_key': file_key,
             'timestamp': datetime.now().isoformat(),
             'dry_run': dry_run
         }
+        
+        # Add document_type if explicitly selected
+        if document_type_name:
+            event['document_type'] = document_type_name
         
         # Execute pipeline
         with st.spinner("Processing file..."):

@@ -18,7 +18,7 @@ class PipelineConfig:
     
     # Processing flags
     dry_run: bool = False
-    skip_embeddings: bool = True  # True for MVP (embeddings not implemented yet)
+    skip_embeddings: bool = True  # MVP mode: set to False to enable embeddings
     
     # Error handling
     continue_on_error: bool = False

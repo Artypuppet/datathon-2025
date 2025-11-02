@@ -53,8 +53,8 @@ dependencies:
       # Embeddings with GPU support
       # Note: PyTorch with CUDA will be installed via separate pip command
       # because conda's pip integration doesn't handle --index-url properly
-      - sentence-transformers==2.2.2
-      - transformers==4.36.2
+      - sentence-transformers>=5.0.0  # Requires compatible huggingface-hub
+      - transformers>=4.50.0
       
       # Local vector DB (instead of OpenSearch)
       - chromadb==0.4.22

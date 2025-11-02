@@ -50,7 +50,7 @@ dependencies:
       - git+https://github.com/alphanome-ai/sec-parser.git
             
       # Embeddings (GPU-accelerated)
-      - sentence-transformers==2.2.2
+      - sentence-transformers>=5.0.0  # Compatible version
       
       # AWS OpenSearch
       - opensearch-py==2.4.2

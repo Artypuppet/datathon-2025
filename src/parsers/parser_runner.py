@@ -10,6 +10,7 @@ import json
 from datetime import datetime
 
 from .factory import ParserFactory
+from .base import DocumentType
 from ..utils.s3_client import S3Client, get_s3_client
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,8 @@ class ParserRunner:
         s3_key: str,
         save_to_s3: bool = True,
         s3_output_prefix: str = "parsed/",
-        save_locally: bool = False
+        save_locally: bool = False,
+        document_type: Optional[DocumentType] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Parse a file from S3.
@@ -105,6 +107,7 @@ class ParserRunner:
             save_to_s3: Whether to save result back to S3
             s3_output_prefix: S3 prefix for output
             save_locally: Whether to also save locally
+            document_type: Optional explicit document type (for user-selected files)
             
         Returns:
             Parsed data dictionary or None if failed
@@ -126,7 +129,7 @@ class ParserRunner:
                 return None
             
             # Parse
-            result = self.factory.parse_file(tmp_path)
+            result = self.factory.parse_file(tmp_path, document_type)
             
             if not result or not result.success:
                 logger.error(f"[ERROR] Parse failed: {result.error if result else 'No parser found'}")
