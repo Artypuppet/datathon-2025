@@ -73,12 +73,13 @@ class BaseParser(ABC):
         pass
     
     @abstractmethod
-    def parse(self, file_path: Path) -> ParseResult:
+    def parse(self, file_path: Path, s3_key: Optional[str] = None) -> ParseResult:
         """
         Parse the file and return structured data.
         
         Args:
             file_path: Path to file to parse
+            s3_key: Optional S3 key of source file (for metadata extraction)
             
         Returns:
             ParseResult with structured data or error

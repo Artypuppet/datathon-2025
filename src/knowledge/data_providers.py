@@ -164,6 +164,58 @@ class YahooFinanceProvider:
             operations.append('Technology')
         
         return operations
+    
+    def get_risk_types_from_info(self, info: Dict[str, Any]) -> List[str]:
+        """
+        Extract risk types from company info (business summary, industry context).
+        
+        Args:
+            info: Company info dictionary
+            
+        Returns:
+            List of risk type strings
+        """
+        risk_types = []
+        summary = (info.get('business_summary', '') or info.get('longBusinessSummary', '') or '').lower()
+        industry = (info.get('industry', '') or '').lower()
+        
+        # Trade and tariff risks
+        if any(kw in summary for kw in ['tariff', 'trade', 'import', 'export', 'trade war', 'trade dispute']):
+            risk_types.append('Tariff/Trade')
+        
+        # Regulatory risks
+        if any(kw in summary for kw in ['regulation', 'regulatory', 'compliance', 'regulatory change']):
+            risk_types.append('Regulatory')
+        
+        # Supply chain risks
+        if any(kw in summary for kw in ['supply chain', 'supplier', 'sourcing', 'manufacturing risk']):
+            risk_types.append('Supply Chain')
+        
+        # Market risks
+        if any(kw in summary for kw in ['market risk', 'competition', 'competitive', 'market condition']):
+            risk_types.append('Market')
+        
+        # Currency/FX risks
+        if any(kw in summary for kw in ['currency', 'foreign exchange', 'fx risk', 'exchange rate']):
+            risk_types.append('Currency/FX')
+        
+        # Technology risks
+        if any(kw in summary for kw in ['cybersecurity', 'data breach', 'privacy', 'technology risk']):
+            risk_types.append('Technology')
+        
+        # Geographic risks
+        if any(kw in summary for kw in ['geopolitical', 'political risk', 'sanctions', 'embargo']):
+            risk_types.append('Geopolitical')
+        
+        # Climate/Environmental risks
+        if any(kw in summary for kw in ['climate', 'environmental', 'carbon', 'sustainability risk']):
+            risk_types.append('Climate/Environmental')
+        
+        # Credit/Financial risks
+        if any(kw in summary for kw in ['credit risk', 'financial risk', 'liquidity', 'debt']):
+            risk_types.append('Credit/Financial')
+        
+        return risk_types
 
 
 class FinancialModelingPrepProvider:

@@ -49,6 +49,8 @@ dependencies:
   - pip:
       # SEC Filing Parsers
       - git+https://github.com/alphanome-ai/sec-parser.git
+      # SEC filing parsing library (edgartools)
+      - edgartools>=4.24.0
             
       # Embeddings with GPU support
       # Note: PyTorch with CUDA will be installed via separate pip command

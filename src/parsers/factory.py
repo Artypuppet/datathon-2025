@@ -61,20 +61,21 @@ class ParserFactory:
         logger.warning(f"[WARN] No parser found for {file_path.name}")
         return None
     
-    def parse_file(self, file_path: Path, document_type: Optional[DocumentType] = None):
+    def parse_file(self, file_path: Path, document_type: Optional[DocumentType] = None, s3_key: Optional[str] = None):
         """
         Automatically select parser and parse file.
         
         Args:
             file_path: Path to file to parse
             document_type: Optional explicit document type (for user-selected files)
+            s3_key: Optional S3 key of the source file (for metadata extraction)
             
         Returns:
             ParseResult or None if no parser found
         """
         parser = self.get_parser(file_path, document_type)
         if parser:
-            return parser.parse(file_path)
+            return parser.parse(file_path, s3_key=s3_key)
         
         return None
 

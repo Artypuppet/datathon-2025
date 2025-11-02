@@ -12,13 +12,18 @@ try:
         FinancialModelingPrepProvider,
         CompanyDataProvider
     )
+    from .metadata_cache import MetadataCache
+    from .graph_builder import KnowledgeGraphBuilder
+    
     __all__ = [
         'EntityExtractor',
         'ContextualEnricher',
         'CompanyKnowledgeDB',
         'YahooFinanceProvider',
         'FinancialModelingPrepProvider',
-        'CompanyDataProvider'
+        'CompanyDataProvider',
+        'MetadataCache',
+        'KnowledgeGraphBuilder'
     ]
 except ImportError:
     __all__ = [
@@ -26,4 +31,17 @@ except ImportError:
         'ContextualEnricher',
         'CompanyKnowledgeDB'
     ]
+    
+    # Try to import what's available
+    try:
+        from .metadata_cache import MetadataCache
+        __all__.append('MetadataCache')
+    except ImportError:
+        pass
+    
+    try:
+        from .graph_builder import KnowledgeGraphBuilder
+        __all__.append('KnowledgeGraphBuilder')
+    except ImportError:
+        pass
 

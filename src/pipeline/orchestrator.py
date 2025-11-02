@@ -8,7 +8,9 @@ from typing import Dict, Any, Optional
 
 from .config import PipelineConfig
 from .stage_parse import ParseStage
+from .stage_aggregate import AggregateStage
 from .stage_embed import EmbeddingStage
+from .stage_parse_and_aggregate import ParseAndAggregateStage
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +27,8 @@ class PipelineOrchestrator:
         """
         self.config = config or PipelineConfig.from_env()
         
-        # Initialize stages
-        self.parse_stage = ParseStage()
+        # Initialize combined parse+aggregate stage (new streamlined approach)
+        self.parse_aggregate_stage = ParseAndAggregateStage()
         
         # Initialize embedding stage if not skipped
         self.embedding_stage = None
@@ -68,25 +70,74 @@ class PipelineOrchestrator:
         logger.info(f"[INFO] Processing file: {context['file_key']}")
         logger.info(f"[INFO] Dry run mode: {context['dry_run']}")
         
-        # Stage 1: Parse
-        try:
-            if self.config.dry_run:
-                logger.info("[DRY RUN] Would execute Stage 1: Parse")
-                context.update({
-                    'parse_status': 'dry_run',
-                    'parsed_key': f"parsed/{Path(context['file_key']).stem}.json (would be created)"
-                })
-            else:
-                if not self.parse_stage.can_execute(context):
-                    return self._error_result("Parse stage cannot execute (missing dependencies)")
-                
-                context = self.parse_stage.execute(context)
-                
-        except Exception as e:
-            logger.error(f"[ERROR] Parse stage failed: {e}", exc_info=True)
-            return self._error_result(f"Parse failed: {str(e)}", context)
+        # Extract ticker from file_key or event
+        ticker = event.get('ticker')
+        if not ticker:
+            # Try to extract from file_key
+            file_key = context['file_key']
+            from ..parsers.html_filing_parser import HTMLFilingParser
+            ticker = HTMLFilingParser._extract_ticker_from_filename(file_key)
         
-        # Stage 2: Embeddings
+        # Check if this is a company filing
+        document_type = context.get('document_type')
+        file_key = context.get('file_key', '').lower()
+        
+        is_company_filing = (
+            document_type == 'HTML_FILING' or
+            file_key.endswith('.html') or file_key.endswith('.txt') or
+            any(ftype in file_key for ftype in ['10-k', '10-q', '8-k']) or
+            ticker is not None
+        )
+        
+        # Use combined parse+aggregate stage for company filings
+        if is_company_filing and ticker:
+            try:
+                if self.config.dry_run:
+                    logger.info("[DRY RUN] Would execute Parse+Aggregate stage")
+                    context.update({
+                        'parse_status': 'dry_run',
+                        'aggregation_status': 'dry_run',
+                        'aggregated_key': f"aggregated/companies/{ticker}.json (would be created)"
+                    })
+                else:
+                    if not self.parse_aggregate_stage.can_execute(ticker):
+                        return self._error_result("Parse+Aggregate stage cannot execute (missing dependencies)")
+                    
+                    # Process all filings for this ticker in one step
+                    result = self.parse_aggregate_stage.execute_for_ticker(ticker)
+                    context.update({
+                        'parse_status': 'success',
+                        'aggregation_status': 'success',
+                        'aggregated_key': result.get('aggregated_key'),
+                        'ticker': ticker,
+                        'filings_processed': result.get('filings_processed', 0),
+                        'filing_types': result.get('filing_types', {}),
+                    })
+                    logger.info(f"[INFO] Parse+Aggregate completed: {result.get('filings_processed')} filings processed")
+            except Exception as e:
+                logger.error(f"[ERROR] Parse+Aggregate stage failed: {e}", exc_info=True)
+                return self._error_result(f"Parse+Aggregate failed: {str(e)}", context)
+        else:
+            # Fall back to old parse-only approach for non-company filings
+            logger.info("[INFO] Using parse-only approach (not a company filing or no ticker)")
+            try:
+                if self.config.dry_run:
+                    logger.info("[DRY RUN] Would execute Stage 1: Parse")
+                    context.update({
+                        'parse_status': 'dry_run',
+                        'parsed_key': f"parsed/{Path(context['file_key']).stem}.json (would be created)"
+                    })
+                else:
+                    if not self.parse_stage.can_execute(context):
+                        return self._error_result("Parse stage cannot execute (missing dependencies)")
+                    
+                    context = self.parse_stage.execute(context)
+                    context['aggregation_status'] = 'skipped'
+            except Exception as e:
+                logger.error(f"[ERROR] Parse stage failed: {e}", exc_info=True)
+                return self._error_result(f"Parse failed: {str(e)}", context)
+        
+        # Stage 3: Embeddings (now uses aggregated data if available)
         if self.config.skip_embeddings:
             logger.info("[INFO] Skipping embeddings (MVP mode)")
             context['embeddings_status'] = 'skipped'
@@ -114,7 +165,7 @@ class PipelineOrchestrator:
                 context['embeddings_status'] = 'failed'
                 context['embedding_error'] = str(e)
         
-        # Stage 3: Database update (skipped in MVP)
+        # Stage 4: Database update (skipped in MVP)
         if self.config.skip_embeddings:
             context['db_update_status'] = 'skipped'
         else:
@@ -141,6 +192,7 @@ class PipelineOrchestrator:
             'document_type': context.get('document_type'),
             'stages': {
                 'parse': 'success',
+                'aggregate': context.get('aggregation_status', 'skipped'),
                 'embeddings': context.get('embeddings_status', 'skipped'),
                 'db_update': context.get('db_update_status', 'skipped'),
             },
@@ -162,6 +214,7 @@ class PipelineOrchestrator:
             'message': 'Would process embeddings and update database',
             'stages': {
                 'parse': 'would_execute',
+                'aggregate': 'would_execute',
                 'embeddings': 'skipped',
                 'db_update': 'skipped',
             },
@@ -179,6 +232,7 @@ class PipelineOrchestrator:
             'error': error_message,
             'stages': {
                 'parse': 'failed',
+                'aggregate': 'not_reached',
                 'embeddings': 'not_reached',
                 'db_update': 'not_reached',
             },

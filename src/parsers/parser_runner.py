@@ -118,9 +118,13 @@ class ParserRunner:
         
         logger.info(f"[INFO] Parsing S3 file: s3://{self.s3_client.bucket_name}/{s3_key}")
         
-        # Download to temp file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(s3_key).suffix) as tmp_file:
-            tmp_path = Path(tmp_file.name)
+        # Download to temp file with original filename preserved
+        # Extract original filename from S3 key
+        original_filename = Path(s3_key).name
+        # Create temp file in /tmp with original filename structure
+        temp_dir = Path(tempfile.gettempdir()) / "datathon_parser"
+        temp_dir.mkdir(exist_ok=True)
+        tmp_path = temp_dir / original_filename
         
         try:
             # Download from S3
@@ -128,8 +132,9 @@ class ParserRunner:
             if not success:
                 return None
             
-            # Parse
-            result = self.factory.parse_file(tmp_path, document_type)
+            # Parse - pass S3 key for metadata extraction
+            # Store S3 key in a custom attribute that parsers can access
+            result = self.factory.parse_file(tmp_path, document_type, s3_key=s3_key)
             
             if not result or not result.success:
                 logger.error(f"[ERROR] Parse failed: {result.error if result else 'No parser found'}")

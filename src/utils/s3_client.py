@@ -101,30 +101,47 @@ class S3Client:
             logger.error(f"[ERROR] Download failed: {e}", exc_info=True)
             return False
     
-    def read_file_content(self, s3_key: str) -> Optional[bytes]:
+    def read_file_content(self, s3_key: str, timeout: int = 60) -> Optional[bytes]:
         """
         Read file content from S3 directly into memory (no disk IO).
+        Uses get_object which is faster than download_file for in-memory processing.
         
         Args:
             s3_key: S3 key (path) of file to read
+            timeout: Request timeout in seconds (default: 60)
             
         Returns:
             File content as bytes, or None if failed
         """
         try:
-            logger.debug(f"[INFO] Reading s3://{self.bucket_name}/{s3_key}")
+            import time
+            start_time = time.time()
+            logger.info(f"[INFO] Reading {s3_key} from S3 (timeout: {timeout}s)")
             
             response = self.s3.get_object(
                 Bucket=self.bucket_name,
                 Key=s3_key
             )
             
+            # Read content with progress indication for large files
             content = response['Body'].read()
-            logger.debug(f"[OK] Read {len(content)} bytes")
+            elapsed = time.time() - start_time
+            
+            size_mb = len(content) / 1024 / 1024
+            speed_mbps = size_mb / elapsed if elapsed > 0 else 0
+            logger.info(f"[OK] Read {len(content):,} bytes ({size_mb:.2f} MB) from {s3_key} in {elapsed:.2f}s ({speed_mbps:.2f} MB/s)")
+            
+            # Check if file is suspiciously large (might indicate an issue)
+            if len(content) > 100 * 1024 * 1024:  # 100 MB
+                logger.warning(f"[WARN] Large file detected: {size_mb:.2f} MB")
+            
             return content
             
+        except self.s3.exceptions.NoSuchKey:
+            logger.error(f"[ERROR] File not found: {s3_key}")
+            return None
         except Exception as e:
-            logger.error(f"[ERROR] Read failed: {e}", exc_info=True)
+            logger.error(f"[ERROR] Failed to read {s3_key}: {e}", exc_info=True)
             return None
     
     def read_text_file(self, s3_key: str, encoding: str = 'utf-8') -> Optional[str]:
@@ -146,6 +163,33 @@ class S3Client:
                 logger.error(f"[ERROR] Decode failed: {e}")
                 return None
         return None
+    
+    def read_json(self, s3_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Read JSON file from S3.
+        
+        Args:
+            s3_key: S3 key (path) of JSON file to read
+            
+        Returns:
+            Parsed JSON data as dictionary, or None if failed
+        """
+        try:
+            text_content = self.read_text_file(s3_key, encoding='utf-8')
+            if text_content:
+                import json
+                data = json.loads(text_content)
+                logger.debug(f"[DEBUG] Read JSON from {s3_key}")
+                return data
+            else:
+                logger.warning(f"[WARN] Could not read text content from {s3_key}")
+                return None
+        except json.JSONDecodeError as e:
+            logger.error(f"[ERROR] JSON decode failed for {s3_key}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"[ERROR] Failed to read JSON from {s3_key}: {e}")
+            return None
     
     def write_content(self, content: bytes, s3_key: str) -> bool:
         """

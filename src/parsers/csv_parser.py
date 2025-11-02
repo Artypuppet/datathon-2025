@@ -4,7 +4,7 @@ CSV Parser for financial data and S&P 500 composition.
 
 import pandas as pd
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, Optional, List
 import logging
 import time
 import re
@@ -26,7 +26,7 @@ class CSVParser(BaseParser):
         """Returns CSV financial type."""
         return DocumentType.CSV_FINANCIAL
     
-    def parse(self, file_path: Path) -> ParseResult:
+    def parse(self, file_path: Path, s3_key: Optional[str] = None) -> ParseResult:
         """
         Parse CSV file into structured format.
         

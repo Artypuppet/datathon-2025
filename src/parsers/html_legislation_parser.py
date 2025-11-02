@@ -3,7 +3,7 @@ HTML/XML Legislation Parser for regulatory documents.
 """
 
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import logging
 import time
 import re
@@ -45,7 +45,7 @@ class HTMLLegislationParser(BaseParser):
         """Return legislation document type."""
         return DocumentType.HTML_LEGISLATION
     
-    def parse(self, file_path: Path) -> ParseResult:
+    def parse(self, file_path: Path, s3_key: Optional[str] = None) -> ParseResult:
         """
         Parse legislation document.
         

@@ -87,6 +87,8 @@ class ParseStage:
                     'parse_status': 'success',
                     'parsed_key': parsed_key,
                     'document_type': data.get('document_type'),
+                    'parse_data': data,  # Store parsed data for downstream stages
+                    'ticker': data.get('ticker'),  # Extract ticker if available
                     'metadata': {
                         'parser_version': data.get('metadata', {}).get('parser_version'),
                         'parse_duration': data.get('metadata', {}).get('parse_duration_seconds', 0),
