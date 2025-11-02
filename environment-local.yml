@@ -59,6 +59,12 @@ dependencies:
       # Local vector DB (instead of OpenSearch)
       - chromadb==0.4.22
       
+      # External data providers
+      - yfinance>=0.2.32  # Yahoo Finance API
+      
+      # SEC filings downloader
+      - sec-edgar-downloader>=5.0.0  # SEC EDGAR filings downloader
+      
       # Logging
       - colorlog==6.8.0
 

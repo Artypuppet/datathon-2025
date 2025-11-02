@@ -20,7 +20,8 @@ class EmbeddingStage:
         s3_client: Optional[S3Client] = None,
         model_name: str = "all-MiniLM-L6-v2",
         use_spacy: bool = False,
-        normalize_text: bool = False
+        normalize_text: bool = False,
+        use_contextual_enrichment: bool = False
     ):
         """
         Initialize embedding stage.
@@ -30,13 +31,27 @@ class EmbeddingStage:
             model_name: Sentence transformer model name
             use_spacy: Whether to use spaCy NLP
             normalize_text: Whether to normalize text (lowercase, etc.)
+            use_contextual_enrichment: Whether to add domain context
         """
         self.s3_client = s3_client or get_s3_client()
+        
+        # Load knowledge database if contextual enrichment is enabled
+        knowledge_db = None
+        if use_contextual_enrichment:
+            try:
+                from ..knowledge import CompanyKnowledgeDB
+                knowledge_db = CompanyKnowledgeDB()
+                logger.info("[INFO] Company knowledge database loaded")
+            except Exception as e:
+                logger.warning(f"[WARN] Failed to load knowledge database: {e}")
+                knowledge_db = None
         
         # Initialize processors
         self.processor = TextProcessor(
             use_spacy=use_spacy,
-            normalize_text=normalize_text
+            normalize_text=normalize_text,
+            use_contextual_enrichment=use_contextual_enrichment,
+            knowledge_db=knowledge_db
         )
         
         self.generator = EmbeddingGenerator(model_name=model_name)

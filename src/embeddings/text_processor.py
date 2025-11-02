@@ -47,7 +47,9 @@ class TextProcessor:
         use_spacy: bool = False,
         chunk_size: int = 512,
         chunk_overlap: int = 50,
-        normalize_text: bool = True
+        normalize_text: bool = True,
+        use_contextual_enrichment: bool = False,
+        knowledge_db=None
     ):
         """
         Initialize text processor.
@@ -57,11 +59,26 @@ class TextProcessor:
             chunk_size: Target chunk size in tokens for splitting
             chunk_overlap: Overlap between chunks
             normalize_text: Whether to normalize text (lowercase, etc.)
+            use_contextual_enrichment: Whether to add domain context to chunks
+            knowledge_db: Optional CompanyKnowledgeDB instance for rich company context
         """
         self.use_spacy = use_spacy and HAS_SPACY
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.normalize_text = normalize_text
+        self.use_contextual_enrichment = use_contextual_enrichment
+        self.knowledge_db = knowledge_db
+        
+        # Initialize contextual enricher if requested
+        self.enricher = None
+        if self.use_contextual_enrichment:
+            try:
+                from ..knowledge import ContextualEnricher
+                self.enricher = ContextualEnricher(knowledge_db=self.knowledge_db)
+                logger.info("[INFO] Contextual enrichment enabled (DB: enabled)" if self.knowledge_db else "[INFO] Contextual enrichment enabled")
+            except ImportError:
+                logger.warning("[WARN] ContextualEnricher not available, disabling enrichment")
+                self.use_contextual_enrichment = False
         
         # Initialize spaCy if requested
         self.nlp = None
@@ -273,6 +290,16 @@ class TextProcessor:
                 
                 # Clean and process text
                 cleaned_text = self.clean_html(section_text)
+                
+                # Apply contextual enrichment BEFORE normalization (preserves context structure)
+                if self.use_contextual_enrichment and self.enricher:
+                    chunk_dict = {"text": cleaned_text, "section_title": section_title}
+                    if doc_type == "html_filing":
+                        cleaned_text = self.enricher.enrich_filing_chunk(chunk_dict, parsed_data)
+                    elif doc_type == "html_legislation":
+                        cleaned_text = self.enricher.enrich_regulation_text(cleaned_text, parsed_data)
+                
+                # Normalize AFTER enrichment
                 cleaned_text = self.normalize(cleaned_text)
                 
                 if self.use_spacy:

@@ -58,6 +58,12 @@ dependencies:
       # SageMaker SDK
       - sagemaker==2.199.0
       
+      # External data providers
+      - yfinance>=0.2.32  # Yahoo Finance API
+      
+      # SEC filings downloader
+      - sec-edgar-downloader>=5.0.0  # SEC EDGAR filings downloader
+      
       # Utilities
       - python-dotenv==1.0.0
       - jsonschema==4.20.0
