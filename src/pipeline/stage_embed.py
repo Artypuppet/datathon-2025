@@ -18,7 +18,7 @@ class EmbeddingStage:
     def __init__(
         self,
         s3_client: Optional[S3Client] = None,
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = "allenai/longformer-base-4096",
         use_spacy: bool = False,
         normalize_text: bool = False,
         use_contextual_enrichment: bool = False
@@ -28,7 +28,7 @@ class EmbeddingStage:
         
         Args:
             s3_client: S3 client instance (optional, auto-created if None)
-            model_name: Sentence transformer model name
+            model_name: Longformer model name (default: allenai/longformer-base-4096)
             use_spacy: Whether to use spaCy NLP
             normalize_text: Whether to normalize text (lowercase, etc.)
             use_contextual_enrichment: Whether to add domain context

@@ -1,5 +1,5 @@
 """
-Embedding generation using sentence-transformers.
+Embedding generation using Longformer for large context windows.
 """
 
 import logging
@@ -7,66 +7,91 @@ from typing import List, Dict, Any, Optional
 import numpy as np
 
 try:
-    from sentence_transformers import SentenceTransformer
-    HAS_SENTENCE_TRANSFORMERS = True
+    from transformers import AutoModel, AutoTokenizer
+    import torch
+    HAS_TRANSFORMERS = True
 except ImportError:
-    HAS_SENTENCE_TRANSFORMERS = False
-    logging.warning("[WARN] sentence-transformers not available")
+    HAS_TRANSFORMERS = False
+    logging.warning("[WARN] transformers not available")
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingGenerator:
     """
-    Generate embeddings from text using sentence-transformers.
+    Generate embeddings from text using Longformer (supports up to 4096 tokens).
     
     Supports GPU acceleration and batch processing for efficiency.
     """
     
     def __init__(
         self,
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = "allenai/longformer-base-4096",
         device: Optional[str] = None,
-        batch_size: int = 32
+        batch_size: int = 8,  # Reduced for Longformer (larger memory footprint)
+        max_length: int = 4096  # Longformer's context window
     ):
         """
-        Initialize embedding generator.
+        Initialize embedding generator with Longformer.
         
         Args:
-            model_name: HuggingFace model name (default: all-MiniLM-L6-v2)
+            model_name: HuggingFace model name (default: allenai/longformer-base-4096)
             device: Device to use ('cuda', 'cpu', or None for auto-detect)
-            batch_size: Batch size for embedding generation
+            batch_size: Batch size for embedding generation (default: 8 for Longformer)
+            max_length: Maximum sequence length (default: 4096 for Longformer)
         """
-        if not HAS_SENTENCE_TRANSFORMERS:
-            raise ImportError("sentence-transformers is required for embedding generation")
+        if not HAS_TRANSFORMERS:
+            raise ImportError("transformers is required for embedding generation")
         
         self.model_name = model_name
         self.batch_size = batch_size
+        self.max_length = max_length
         
         # Auto-detect device if not specified
         if device is None:
             try:
-                import torch
                 self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
             except ImportError:
                 self.device = 'cpu'
         else:
             self.device = device
         
-        logger.info(f"[INFO] Loading model: {model_name}")
+        logger.info(f"[INFO] Loading Longformer model: {model_name}")
         logger.info(f"[INFO] Using device: {self.device}")
+        logger.info(f"[INFO] Max sequence length: {max_length}")
         
-        # Load model
+        # Load tokenizer and model
         try:
-            self.model = SentenceTransformer(model_name, device=self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self.model = AutoModel.from_pretrained(model_name)
+            self.model.to(self.device)
+            self.model.eval()  # Set to evaluation mode
             logger.info(f"[OK] Model loaded successfully")
         except Exception as e:
             logger.error(f"[ERROR] Failed to load model: {e}")
             raise
         
-        # Get embedding dimension
-        self.embedding_dim = self.model.get_sentence_embedding_dimension()
+        # Get embedding dimension from model config
+        self.embedding_dim = self.model.config.hidden_size
         logger.info(f"[INFO] Embedding dimension: {self.embedding_dim}")
+    
+    def _mean_pooling(self, model_output, attention_mask):
+        """
+        Mean pooling over token embeddings, weighted by attention mask.
+        
+        Args:
+            model_output: Model outputs containing last_hidden_state
+            attention_mask: Attention mask to exclude padding tokens
+            
+        Returns:
+            Pooled embeddings tensor
+        """
+        token_embeddings = model_output.last_hidden_state
+        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+        # Sum embeddings, weighted by attention mask, and divide by sum of mask
+        sum_embeddings = torch.sum(token_embeddings * input_mask_expanded, 1)
+        sum_mask = torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+        return sum_embeddings / sum_mask
     
     def generate_embeddings(
         self,
@@ -74,7 +99,7 @@ class EmbeddingGenerator:
         batch_size: Optional[int] = None
     ) -> np.ndarray:
         """
-        Generate embeddings for a list of texts.
+        Generate embeddings for a list of texts using Longformer.
         
         Args:
             texts: List of text strings to embed
@@ -89,17 +114,51 @@ class EmbeddingGenerator:
         
         batch_size = batch_size or self.batch_size
         
-        logger.info(f"[INFO] Generating embeddings for {len(texts)} texts")
+        logger.info(f"[INFO] Generating embeddings for {len(texts)} texts with Longformer")
         
         try:
-            embeddings = self.model.encode(
-                texts,
-                batch_size=batch_size,
-                show_progress_bar=False,  # Disable for cleaner logs
-                convert_to_numpy=True
-            )
+            all_embeddings = []
             
-            logger.info(f"[OK] Generated {len(embeddings)} embeddings")
+            # Process in batches
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                
+                # Tokenize with truncation up to max_length
+                encoded_input = self.tokenizer(
+                    batch_texts,
+                    padding=True,
+                    truncation=True,
+                    max_length=self.max_length,
+                    return_tensors='pt'
+                )
+                
+                # Move to device
+                encoded_input = {k: v.to(self.device) for k, v in encoded_input.items()}
+                
+                # Generate embeddings
+                with torch.no_grad():
+                    model_output = self.model(**encoded_input)
+                
+                # Mean pooling to get sentence embeddings
+                sentence_embeddings = self._mean_pooling(
+                    model_output,
+                    encoded_input['attention_mask']
+                )
+                
+                # Normalize embeddings (L2 norm)
+                sentence_embeddings = torch.nn.functional.normalize(
+                    sentence_embeddings,
+                    p=2,
+                    dim=1
+                )
+                
+                # Convert to numpy and add to list
+                all_embeddings.append(sentence_embeddings.cpu().numpy())
+            
+            # Concatenate all batches
+            embeddings = np.vstack(all_embeddings)
+            
+            logger.info(f"[OK] Generated {len(embeddings)} embeddings (shape: {embeddings.shape})")
             return embeddings
             
         except Exception as e:

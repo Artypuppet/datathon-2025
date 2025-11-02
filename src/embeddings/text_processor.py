@@ -45,8 +45,8 @@ class TextProcessor:
     def __init__(
         self,
         use_spacy: bool = False,
-        chunk_size: int = 512,
-        chunk_overlap: int = 50,
+        chunk_size: int = 2048,  # Increased for Longformer context window
+        chunk_overlap: int = 200,  # Increased overlap for better context
         normalize_text: bool = True,
         use_contextual_enrichment: bool = False,
         knowledge_db=None
@@ -56,8 +56,8 @@ class TextProcessor:
         
         Args:
             use_spacy: Whether to use spaCy for advanced NLP (requires model)
-            chunk_size: Target chunk size in tokens for splitting
-            chunk_overlap: Overlap between chunks
+            chunk_size: Target chunk size in tokens for splitting (default: 2048 for Longformer)
+            chunk_overlap: Overlap between chunks (default: 200 for Longformer)
             normalize_text: Whether to normalize text (lowercase, etc.)
             use_contextual_enrichment: Whether to add domain context to chunks
             knowledge_db: Optional CompanyKnowledgeDB instance for rich company context

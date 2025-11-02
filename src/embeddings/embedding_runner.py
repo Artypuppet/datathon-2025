@@ -26,7 +26,7 @@ class EmbeddingRunner:
     
     def __init__(
         self,
-        model_name: str = "all-MiniLM-L6-v2",
+        model_name: str = "allenai/longformer-base-4096",
         use_spacy: bool = False,
         normalize_text: bool = True,
         device: Optional[str] = None
@@ -35,7 +35,7 @@ class EmbeddingRunner:
         Initialize embedding runner.
         
         Args:
-            model_name: Sentence transformer model name
+            model_name: Longformer model name (default: allenai/longformer-base-4096)
             use_spacy: Whether to use spaCy NLP
             normalize_text: Whether to normalize text
             device: Device for embeddings (auto-detect if None)
