@@ -232,7 +232,7 @@ class S3Client:
         """
         return self.write_content(content.encode(encoding), s3_key)
     
-    def write_json(self, data: Dict[Any, Any], s3_key: str, indent: int = 2) -> bool:
+    def write_json(self, data: Dict[Any, Any], s3_key: str, indent: Optional[int] = None) -> bool:
         """
         Write JSON data to S3.
         
@@ -246,7 +246,9 @@ class S3Client:
         """
         try:
             # ensure_ascii=False preserves UTF-8 characters (e.g., é, ü, 法)
-            json_str = json.dumps(data, indent=indent, ensure_ascii=False)
+            # Use minified JSON by default (indent=None) to save space
+            # Set indent=2 or other value if formatting is needed for debugging
+            json_str = json.dumps(data, indent=indent, ensure_ascii=False, separators=(',', ':'))
             return self.write_text(json_str, s3_key)
         except Exception as e:
             logger.error(f"[ERROR] JSON serialization failed: {e}")

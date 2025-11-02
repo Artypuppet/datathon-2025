@@ -19,6 +19,13 @@ try:
 except ImportError:
     HAS_METADATA_CACHE = False
 
+# Optional import for knowledge graph builder
+try:
+    from ..knowledge.graph_builder import KnowledgeGraphBuilder
+    HAS_GRAPH_BUILDER = True
+except ImportError:
+    HAS_GRAPH_BUILDER = False
+
 
 class CompanyAggregator:
     """
@@ -45,6 +52,15 @@ class CompanyAggregator:
                 logger.info("[INFO] Metadata enrichment enabled (Yahoo Finance)")
             except Exception as e:
                 logger.warning(f"[WARN] Failed to initialize metadata cache: {e}")
+        
+        # Initialize knowledge graph builder if available
+        self.graph_builder = None
+        if HAS_GRAPH_BUILDER:
+            try:
+                self.graph_builder = KnowledgeGraphBuilder()
+                logger.info("[INFO] Knowledge graph builder enabled")
+            except Exception as e:
+                logger.warning(f"[WARN] Failed to initialize knowledge graph builder: {e}")
     
     def aggregate_company(
         self,
@@ -207,6 +223,11 @@ class CompanyAggregator:
         # Extract entities across all filings (simple extraction for MVP)
         entities = self._extract_entities(filing_10k + filing_10q + filing_8k)
         
+        # Build knowledge graph triples
+        knowledge_graph_triples = self._build_knowledge_graph_triples(
+            ticker, aggregated_sections, entities, filing_10k, filing_10q, filing_8k
+        )
+        
         # Build aggregated structure
         aggregated = {
             'ticker': ticker,
@@ -215,6 +236,7 @@ class CompanyAggregator:
             'aggregated_sections': aggregated_sections,
             'entities': entities,
             'temporal_timeline': temporal_timeline,
+            'knowledge_graph': knowledge_graph_triples,
             'metadata': {
                 'latest_10k_date': filing_10k[0].get('filing_date') if filing_10k else None,
                 'latest_10q_date': filing_10q[0].get('filing_date') if filing_10q else None,
@@ -397,6 +419,143 @@ class CompanyAggregator:
         
         return merged
     
+    def _build_knowledge_graph_triples(
+        self,
+        ticker: str,
+        aggregated_sections: Dict[str, Any],
+        entities: Dict[str, Any],
+        filing_10k: List[Dict],
+        filing_10q: List[Dict],
+        filing_8k: List[Dict]
+    ) -> List[Dict[str, str]]:
+        """
+        Build knowledge graph triples from aggregated data.
+        
+        Returns triples in format: [{"subject": "...", "relation": "...", "object": "..."}]
+        
+        Args:
+            ticker: Company ticker
+            aggregated_sections: Merged sections dictionary
+            entities: Extracted entities dictionary
+            filing_10k: 10-K filings
+            filing_10q: 10-Q filings
+            filing_8k: 8-K filings
+            
+        Returns:
+            List of triple dictionaries
+        """
+        triples = []
+        company_name = None
+        
+        # Get company name from first available filing
+        for filing_list in [filing_10k, filing_10q, filing_8k]:
+            if filing_list:
+                company_name = filing_list[0].get('company_name', ticker)
+                break
+        
+        if not company_name:
+            company_name = ticker
+        
+        # Company basic properties (from metadata)
+        if filing_10k:
+            latest_10k = filing_10k[0]
+            sector = latest_10k.get('sector') or entities.get('sector')
+            industry = latest_10k.get('industry') or entities.get('industry')
+            country = latest_10k.get('country') or entities.get('country')
+            
+            if sector:
+                triples.append({
+                    'subject': company_name,
+                    'relation': 'HAS_SECTOR',
+                    'object': sector
+                })
+            if industry:
+                triples.append({
+                    'subject': company_name,
+                    'relation': 'HAS_INDUSTRY',
+                    'object': industry
+                })
+            if country:
+                triples.append({
+                    'subject': company_name,
+                    'relation': 'OPERATES_IN',
+                    'object': country
+                })
+        
+        # Country relationships
+        for country in entities.get('countries', []):
+            triples.append({
+                'subject': company_name,
+                'relation': 'OPERATES_IN',
+                'object': country
+            })
+        
+        # Region relationships
+        for region in entities.get('regions', []):
+            triples.append({
+                'subject': company_name,
+                'relation': 'OPERATES_IN_REGION',
+                'object': region
+            })
+        
+        # Operations relationships
+        for operation in entities.get('operations', []):
+            triples.append({
+                'subject': company_name,
+                'relation': 'HAS_OPERATION',
+                'object': operation
+            })
+        
+        # Risk type relationships
+        for risk_type in entities.get('risk_types', []):
+            triples.append({
+                'subject': company_name,
+                'relation': 'HAS_RISK_TYPE',
+                'object': risk_type
+            })
+        
+        # Extract relationships from sections (if graph builder available)
+        if self.graph_builder:
+            try:
+                # Create temporary aggregated data structure for graph builder
+                temp_aggregated = {
+                    'ticker': ticker,
+                    'company_name': company_name,
+                    'entities': entities,
+                    'aggregated_sections': aggregated_sections,
+                    'cik': filing_10k[0].get('cik', '') if filing_10k else '',
+                    'metadata': {
+                        'sector': filing_10k[0].get('sector', '') if filing_10k else '',
+                        'industry': filing_10k[0].get('industry', '') if filing_10k else '',
+                    },
+                    'source_filings': []
+                }
+                
+                # Build graph using graph builder
+                graph = self.graph_builder.build_graph(temp_aggregated)
+                
+                # Convert relationships to triples format
+                for rel in graph.get('relationships', []):
+                    triples.append({
+                        'subject': rel.get('source', ''),
+                        'relation': rel.get('type', ''),
+                        'object': rel.get('target', '')
+                    })
+            except Exception as e:
+                logger.warning(f"[WARN] Failed to extract relationships from graph builder: {e}")
+        
+        # Deduplicate triples (same subject-relation-object)
+        seen = set()
+        unique_triples = []
+        for triple in triples:
+            key = (triple['subject'], triple['relation'], triple['object'])
+            if key not in seen:
+                seen.add(key)
+                unique_triples.append(triple)
+        
+        logger.info(f"[INFO] Built {len(unique_triples)} knowledge graph triple(s)")
+        return unique_triples
+    
     def _build_timeline(
         self,
         filing_10k: List[Dict],
@@ -522,6 +681,7 @@ class CompanyAggregator:
                 'filing_counts': {'10-K': 0, '10-Q': 0, '8-K': 0},
                 'aggregated_at': datetime.now().isoformat()
             },
+            'knowledge_graph': [],
             'source_filings': []
         }
 

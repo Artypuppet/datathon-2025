@@ -78,6 +78,7 @@ models/
 
 # Data files (can be large)
 data/
+test_output/
 
 # Cli output
 download_log_*.txt
