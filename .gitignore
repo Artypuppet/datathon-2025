@@ -79,6 +79,7 @@ models/
 # Data files (can be large)
 data/
 test_output/
+chroma_db/
 
 # Cli output
 download_log_*.txt

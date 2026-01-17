@@ -397,11 +397,25 @@ class HTMLFilingParser(BaseParser):
                 section_text_parts = []
                 section_tables = []
                 
+                # Track previous text to avoid duplicate headings
+                prev_text = None
                 for node in section_doc.nodes:
                     if isinstance(node, TextBlockNode):
                         text = node.content.strip()
                         if text:
+                            # Skip if this text is identical to previous (duplicate heading/content)
+                            if text == prev_text:
+                                continue
+                            
+                            # Skip very short single-word texts that look like headings (often duplicated)
+                            words = text.split()
+                            if len(words) == 1 and len(text) < 15:
+                                # This might be a heading - check if next text starts with same word
+                                # We'll be more lenient and include it, but the _clean_text will handle spacing
+                                pass
+                            
                             section_text_parts.append(text)
+                            prev_text = text
                     elif isinstance(node, TableNode):
                         try:
                             table_data = {
@@ -425,7 +439,9 @@ class HTMLFilingParser(BaseParser):
                         except Exception as e:
                             logger.debug(f"[DEBUG] Failed to extract table: {e}")
                 
-                section_text = '\n'.join(section_text_parts)
+                # Join text parts with space to ensure proper separation
+                # Use space instead of newline since _clean_text will handle spacing
+                section_text = ' '.join(section_text_parts)
                 section_text = self._clean_text(section_text)
                 
                 # Remove the section header from the text (it's usually at the start)
@@ -493,22 +509,34 @@ class HTMLFilingParser(BaseParser):
         full_text = ""
         node_positions = []  # Track which node corresponds to which character position
         
+        prev_text = None
         for i, node in enumerate(document.nodes):
             start_pos = len(full_text)
+            text = None
             
             if isinstance(node, HeadingNode):
                 text = node.content.strip()
-                full_text += text + "\n\n"
+                # Headings are often duplicated, skip if same as previous
+                if text != prev_text:
+                    full_text += text + "\n\n"
             elif isinstance(node, TextBlockNode):
                 text = node.content.strip()
-                full_text += text + "\n"
+                # Skip if identical to previous text (duplicate)
+                if text != prev_text and text:
+                    full_text += text + "\n"
             else:
                 # For other node types, try to get text content
                 if hasattr(node, 'content'):
                     text = str(node.content).strip()
-                    full_text += text + "\n"
-                continue
+                    if text != prev_text and text:
+                        full_text += text + "\n"
+                    else:
+                        continue
+                else:
+                    continue
             
+            if text:
+                prev_text = text
             end_pos = len(full_text)
             node_positions.append((i, start_pos, end_pos, node))
         
@@ -543,13 +571,15 @@ class HTMLFilingParser(BaseParser):
             content_parts = []
             tables = []
             
+            prev_text = None
             for i in range(heading_pos, end_pos):
                 node = document.nodes[i]
                 
                 if isinstance(node, TextBlockNode):
                     text = node.content.strip()
-                    if text:
+                    if text and text != prev_text:  # Skip duplicates
                         content_parts.append(text)
+                        prev_text = text
                 
                 elif isinstance(node, TableNode):
                     # Extract table data
@@ -577,8 +607,8 @@ class HTMLFilingParser(BaseParser):
                     except Exception as e:
                         logger.debug(f"[DEBUG] Failed to extract table: {e}")
             
-            # Combine all text content
-            section_text = '\n'.join(content_parts)
+            # Combine all text content with spaces to ensure proper separation
+            section_text = ' '.join(content_parts)
             section_text = self._clean_text(section_text)
             
             # Skip very short sections (likely false positives)
@@ -606,7 +636,7 @@ class HTMLFilingParser(BaseParser):
                         all_text_parts.append(text)
             
             if all_text_parts:
-                all_text = self._clean_text('\n'.join(all_text_parts))
+                all_text = self._clean_text(' '.join(all_text_parts))
                 sections.append({
                     "section_id": "full_document",
                     "title": "Full Document",
@@ -940,13 +970,51 @@ class HTMLFilingParser(BaseParser):
         logger.warning("[WARN] Could not extract CIK from HTML")
         return ""
     
-    @staticmethod
-    def _clean_text(text: str) -> str:
-        """Clean and normalize text."""
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text)
-        # Remove special characters but keep basic punctuation
-        text = re.sub(r'[^\w\s\.\,\;\:\!\?\-\(\)]', '', text)
+    def _clean_text(self, text: str) -> str:
+        """
+        Clean and normalize text while preserving sentence boundaries.
+        
+        Preserves:
+        - Sentence endings (. ! ?)
+        - Paragraph boundaries (double newlines)
+        - Proper spacing between sentences
+        
+        Fixes:
+        - Collapses multiple spaces but preserves sentence spacing
+        - Removes special characters but keeps punctuation
+        - Ensures space after sentence endings
+        """
+        if not text:
+            return ""
+        
+        # First, normalize newlines: preserve double newlines (paragraph breaks) as space
+        # Single newlines become spaces, but ensure sentence endings have proper spacing
+        text = re.sub(r'\n\s*\n+', ' ', text)  # Double+ newlines -> single space
+        text = re.sub(r'\n+', ' ', text)  # Single newlines -> space
+        
+        # Ensure space after sentence endings if not present
+        text = re.sub(r'([.!?])([A-Z])', r'\1 \2', text)  # Add space after .!? before capital
+        
+        # Ensure space after sentence endings followed by lowercase (abbreviations)
+        text = re.sub(r'([.!?])([a-z])', r'\1 \2', text)
+        
+        # Collapse multiple spaces but preserve single spaces
+        text = re.sub(r' +', ' ', text)
+        
+        # Remove special characters but keep essential punctuation and common symbols
+        # Keep: letters, digits, spaces, basic punctuation, parentheses, dashes, quotes
+        text = re.sub(r'[^\w\s\.\,\;\:\!\?\-\(\)\"\'%$£€]', '', text)
+        
+        # Fix common patterns that cause issues:
+        # "WordWord" -> "Word Word" (missing space between words)
+        text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)  # lowercase followed by uppercase
+        
+        # Fix numbers followed by letters (e.g., "2025compared" -> "2025 compared")
+        text = re.sub(r'(\d)([A-Za-z])', r'\1 \2', text)
+        
+        # Collapse spaces again after fixes
+        text = re.sub(r' +', ' ', text)
+        
         return text.strip()
     
     @staticmethod

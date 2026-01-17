@@ -11,6 +11,7 @@ from .stage_parse import ParseStage
 from .stage_aggregate import AggregateStage
 from .stage_embed import EmbeddingStage
 from .stage_parse_and_aggregate import ParseAndAggregateStage
+from .stage_vectordb import VectorDBStage
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,11 @@ class PipelineOrchestrator:
         self.embedding_stage = None
         if not self.config.skip_embeddings:
             self.embedding_stage = EmbeddingStage()
+        
+        # Initialize VectorDB stage if embeddings are enabled
+        self.vectordb_stage = None
+        if not self.config.skip_embeddings:
+            self.vectordb_stage = VectorDBStage()
         
         logger.info(f"[INFO] PipelineOrchestrator initialized")
         logger.info(f"[INFO] Config: dry_run={self.config.dry_run}, skip_embeddings={self.config.skip_embeddings}")
@@ -137,17 +143,18 @@ class PipelineOrchestrator:
                 logger.error(f"[ERROR] Parse stage failed: {e}", exc_info=True)
                 return self._error_result(f"Parse failed: {str(e)}", context)
         
-        # Stage 3: Embeddings (now uses aggregated data if available)
+        # Stage 3: Embeddings (uses aggregated data if available, otherwise parsed data)
         if self.config.skip_embeddings:
             logger.info("[INFO] Skipping embeddings (MVP mode)")
             context['embeddings_status'] = 'skipped'
         else:
             try:
                 if self.config.dry_run:
-                    logger.info("[DRY RUN] Would execute Stage 2: Embeddings")
+                    logger.info("[DRY RUN] Would execute Stage 3: Embeddings")
+                    output_name = Path(context.get('aggregated_key', context.get('parsed_key', 'unknown'))).stem
                     context.update({
                         'embedding_status': 'dry_run',
-                        'embedding_key': f"embeddings/{Path(context['parsed_key']).stem}_embedded.json (would be created)"
+                        'embedding_key': f"embeddings/{output_name}_embedded.json (would be created)"
                     })
                 else:
                     if not self.embedding_stage:
@@ -157,6 +164,8 @@ class PipelineOrchestrator:
                         logger.warning("[WARN] Embedding stage cannot execute (missing dependencies)")
                         context['embeddings_status'] = 'skipped'
                     else:
+                        # Pass both aggregated_key and parsed_key to embedding stage
+                        # It will prefer aggregated_key if available
                         context = self.embedding_stage.execute(context)
                         
             except Exception as e:
@@ -165,11 +174,30 @@ class PipelineOrchestrator:
                 context['embeddings_status'] = 'failed'
                 context['embedding_error'] = str(e)
         
-        # Stage 4: Database update (skipped in MVP)
+        # Stage 4: VectorDB storage (store embeddings for similarity search)
         if self.config.skip_embeddings:
-            context['db_update_status'] = 'skipped'
+            logger.info("[INFO] Skipping VectorDB storage (embeddings disabled)")
+            context['vectordb_status'] = 'skipped'
         else:
-            context['db_update_status'] = 'not_implemented'
+            try:
+                if self.config.dry_run:
+                    logger.info("[DRY RUN] Would execute Stage 4: VectorDB Storage")
+                    context['vectordb_status'] = 'dry_run'
+                else:
+                    if not self.vectordb_stage:
+                        logger.warning("[WARN] VectorDB stage not initialized")
+                        context['vectordb_status'] = 'skipped'
+                    elif not self.vectordb_stage.can_execute(context):
+                        logger.warning("[WARN] VectorDB stage cannot execute")
+                        context['vectordb_status'] = 'skipped'
+                    else:
+                        context = self.vectordb_stage.execute(context)
+                        
+            except Exception as e:
+                logger.error(f"[ERROR] VectorDB stage failed: {e}", exc_info=True)
+                # Don't fail entire pipeline if VectorDB fails
+                context['vectordb_status'] = 'failed'
+                context['vectordb_error'] = str(e)
         
         # Final result
         if self.config.dry_run:
@@ -189,12 +217,14 @@ class PipelineOrchestrator:
             'status': 'success',
             'file_key': context['file_key'],
             'parsed_key': context.get('parsed_key'),
+            'aggregated_key': context.get('aggregated_key'),
+            'embedding_key': context.get('embedding_key'),
             'document_type': context.get('document_type'),
             'stages': {
                 'parse': 'success',
                 'aggregate': context.get('aggregation_status', 'skipped'),
                 'embeddings': context.get('embeddings_status', 'skipped'),
-                'db_update': context.get('db_update_status', 'skipped'),
+                'vectordb': context.get('vectordb_status', 'skipped'),
             },
             'metadata': context.get('metadata', {}),
             'dry_run': False
@@ -210,13 +240,15 @@ class PipelineOrchestrator:
             'status': 'dry_run',
             'file_key': context['file_key'],
             'parsed_key': context.get('parsed_key'),
+            'aggregated_key': context.get('aggregated_key'),
+            'embedding_key': context.get('embedding_key'),
             'document_type': context.get('document_type'),
-            'message': 'Would process embeddings and update database',
+            'message': 'Would process embeddings and update vector database',
             'stages': {
                 'parse': 'would_execute',
                 'aggregate': 'would_execute',
-                'embeddings': 'skipped',
-                'db_update': 'skipped',
+                'embeddings': context.get('embeddings_status', 'skipped'),
+                'vectordb': context.get('vectordb_status', 'skipped'),
             },
             'dry_run': True
         }

@@ -1,0 +1,32 @@
+{
+    "job_name": "batch-embed-all-tickers",
+    "role": "arn:aws:iam::YOUR_ACCOUNT_ID:role/SageMakerExecutionRole",
+    "instance_type": "ml.g4dn.xlarge",
+    "instance_count": 1,
+    "entry_point": "sagemaker_entrypoint.py",
+    "source_dir": ".",
+    "code_location": "s3://your-bucket/sagemaker-code/",
+    "hyperparameters": {
+        "model-name": "llmware/industry-bert-sec-v0.1",
+        "vectordb-backend": "opensearch",
+        "opensearch-index": "company_embeddings",
+        "use-contextual-enrichment": "false",
+        "sentence-level-chunking": "false"
+    },
+    "environment": {
+        "OPENSEARCH_ENDPOINT": "https://your-opensearch-endpoint.es.amazonaws.com",
+        "AWS_DEFAULT_REGION": "us-east-1",
+        "S3_BUCKET": "your-datathon-bucket"
+    },
+    "input_data": {
+        "sp500_csv": {
+            "s3_data_type": "S3Prefix",
+            "s3_uri": "s3://your-bucket/data/2025-08-15_composition_sp500.csv"
+        }
+    },
+    "output_data": {
+        "s3_output_path": "s3://your-bucket/results/embeddings/",
+        "checkpoint_path": "/opt/ml/checkpoints/"
+    },
+    "notes": "Update role ARN, S3 buckets, and OpenSearch endpoint with your actual values"
+}

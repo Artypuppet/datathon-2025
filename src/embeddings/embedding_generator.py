@@ -1,5 +1,9 @@
 """
-Embedding generation using Longformer for large context windows.
+Embedding generation using transformer models optimized for SEC filings.
+
+Supports:
+- llmware/industry-bert-sec-v0.1: BERT model fine-tuned on SEC filings (recommended)
+- Other HuggingFace transformer models
 """
 
 import logging
@@ -19,26 +23,28 @@ logger = logging.getLogger(__name__)
 
 class EmbeddingGenerator:
     """
-    Generate embeddings from text using Longformer (supports up to 4096 tokens).
+    Generate embeddings from text using transformer models.
+    
+    Default: llmware/industry-bert-sec-v0.1 (BERT fine-tuned on SEC filings)
     
     Supports GPU acceleration and batch processing for efficiency.
     """
     
     def __init__(
         self,
-        model_name: str = "allenai/longformer-base-4096",
+        model_name: str = "llmware/industry-bert-sec-v0.1",
         device: Optional[str] = None,
-        batch_size: int = 8,  # Reduced for Longformer (larger memory footprint)
-        max_length: int = 4096  # Longformer's context window
+        batch_size: int = 32,  # BERT can handle larger batches
+        max_length: int = 512  # BERT's standard context window
     ):
         """
-        Initialize embedding generator with Longformer.
+        Initialize embedding generator.
         
         Args:
-            model_name: HuggingFace model name (default: allenai/longformer-base-4096)
+            model_name: HuggingFace model name (default: llmware/industry-bert-sec-v0.1)
             device: Device to use ('cuda', 'cpu', or None for auto-detect)
-            batch_size: Batch size for embedding generation (default: 8 for Longformer)
-            max_length: Maximum sequence length (default: 4096 for Longformer)
+            batch_size: Batch size for embedding generation (default: 32 for BERT)
+            max_length: Maximum sequence length (default: 512 for BERT)
         """
         if not HAS_TRANSFORMERS:
             raise ImportError("transformers is required for embedding generation")
@@ -56,7 +62,7 @@ class EmbeddingGenerator:
         else:
             self.device = device
         
-        logger.info(f"[INFO] Loading Longformer model: {model_name}")
+        logger.info(f"[INFO] Loading model: {model_name}")
         logger.info(f"[INFO] Using device: {self.device}")
         logger.info(f"[INFO] Max sequence length: {max_length}")
         
@@ -114,7 +120,7 @@ class EmbeddingGenerator:
         
         batch_size = batch_size or self.batch_size
         
-        logger.info(f"[INFO] Generating embeddings for {len(texts)} texts with Longformer")
+        logger.info(f"[INFO] Generating embeddings for {len(texts)} texts")
         
         try:
             all_embeddings = []

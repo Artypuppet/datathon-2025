@@ -48,12 +48,16 @@ dependencies:
   - pip:
       # SEC Filing Parsers
       - git+https://github.com/alphanome-ai/sec-parser.git
+      # SEC filing parsing library (edgartools)
+      - edgartools>=4.24.0
             
       # Embeddings (GPU-accelerated)
       - sentence-transformers>=5.0.0  # Compatible version
+      - transformers>=4.35.0  # For Longformer embeddings
       
       # AWS OpenSearch
       - opensearch-py==2.4.2
+      - requests-aws4auth==1.2.3  # AWS IAM auth for OpenSearch
       
       # SageMaker SDK
       - sagemaker==2.199.0

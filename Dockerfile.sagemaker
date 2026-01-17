@@ -1,0 +1,38 @@
+# Dockerfile for SageMaker Batch Embedding Job
+# Based on PyTorch for GPU support
+
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
+
+# Set working directory
+WORKDIR /opt/ml/code
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+# Note: PyTorch is already installed in base image, so requirements.txt excludes it
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
+    # Verify PyTorch version (should be 2.1.0 from base image) \
+    python -c "import torch; print(f'PyTorch version: {torch.__version__}')" && \
+    # Verify transformers version \
+    python -c "import transformers; print(f'transformers version: {transformers.__version__}')"
+
+# Install spaCy model
+RUN python -m spacy download en_core_web_sm
+
+# Copy application code
+COPY src/ /opt/ml/code/src/
+COPY scripts/ /opt/ml/code/scripts/
+
+# Set Python path
+ENV PYTHONPATH=/opt/ml/code:/opt/ml/code/src
+
+# Set default entrypoint (can be overridden)
+ENTRYPOINT ["python3", "/opt/ml/code/scripts/batch_embed_all_tickers.py"]
+

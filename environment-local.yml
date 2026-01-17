@@ -59,8 +59,10 @@ dependencies:
       - torch>=2.0.0  # Required for transformers/Longformer
       - sentence-transformers>=5.0.0  # Optional, kept for backward compatibility
       
-      # Local vector DB (instead of OpenSearch)
-      - chromadb==0.4.22
+      # Vector databases
+      - chromadb==0.4.22  # Local development
+      - opensearch-py==2.4.2  # AWS OpenSearch (production)
+      - requests-aws4auth==1.2.3  # AWS IAM auth for OpenSearch
       
       # External data providers
       - yfinance>=0.2.32  # Yahoo Finance API
