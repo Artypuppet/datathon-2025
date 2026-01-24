@@ -2,7 +2,7 @@
 # Includes GPU-enabled PyTorch for faster local embeddings
 # Use this for parsing, testing, embeddings, and dashboard development
 
-name: datathon-local
+name: risk-scorer-local
 channels:
   - conda-forge
   - defaults
@@ -76,7 +76,7 @@ dependencies:
 # Installation instructions:
 # 1. Check your CUDA version: nvidia-smi (look for CUDA Version)
 # 2. conda env create -f environment-local.yml
-# 3. conda activate datathon-local
+# 3. conda activate risk-scorer-local
 # 4. Install PyTorch with GPU support (choose one):
 #    For CUDA 11.8: pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu118
 #    For CUDA 12.1: pip install torch==2.1.2 --index-url https://download.pytorch.org/whl/cu121

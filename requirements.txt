@@ -1,28 +1,34 @@
-# Core dependencies for batch embedding generation
-# Note: torch is already installed in base image (pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime)
-# DO NOT reinstall torch - it will cause version conflicts
-# torch>=2.0.0  # Commented out - already in base image
-
-# transformers 4.33.3 is tested and compatible with PyTorch 2.1.0
-# Versions 4.34+ may have pytree compatibility issues (register_pytree_node)
-# Versions 4.36+ require PyTorch 2.1.1+
-transformers==4.33.3
-numpy>=1.24.0,<2.0.0  # Pin to avoid numpy 2.0 which may have compatibility issues
+# Core dependencies
+numpy>=1.24.0,<2.0.0
 pandas>=2.0.0
-
-# AWS and Vector DB
-opensearch-py>=2.0.0
-boto3>=1.28.0
-requests-aws4auth>=1.2.3  # Required for IAM authentication with OpenSearch
 python-dotenv>=1.0.0
 
-# NLP
-spacy>=3.7.0
+# FastAPI and web server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
 
-# Data processing
+# Snowflake
+snowflake-connector-python>=3.7.0
+
+# Neo4j
+neo4j>=5.14.0
+
+# Google Gemini
+google-generativeai>=0.3.0
+
+# SEC filing parsing
+sec-edgar-downloader>=5.0.0
+edgartools>=0.1.0
+
+# NLP and text processing
+spacy>=3.7.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
+langdetect>=1.0.9
 
-# Optional: For metadata enrichment (if needed)
-# yfinance>=0.2.0
+# HTTP requests
+requests>=2.31.0
 
+# Utilities
+python-dateutil>=2.8.0

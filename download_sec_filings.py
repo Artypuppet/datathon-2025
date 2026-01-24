@@ -1,8 +1,8 @@
 """
-Download SEC filings (10-K, 10-Q, 8-K) for S&P 500 companies and upload to S3.
+Download SEC filings (10-K, 10-Q, 8-K) for companies and save locally.
 
-Uses sec-edgar-downloader with multiprocessing to download filings directly to S3
-without saving to disk first.
+Uses sec-edgar-downloader with multiprocessing to download filings to local disk.
+Files are saved to data/filings/{ticker}/{date}-{type}.html
 """
 
 import sys
@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from io import BytesIO
 import tempfile
 import shutil
 import time
@@ -22,8 +21,6 @@ import re
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.utils import get_s3_client
-
 logging.basicConfig(
     level=logging.INFO,
     format='[%(levelname)s] %(message)s'
@@ -31,21 +28,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def download_filing_to_s3(
+def download_filing_local(
     ticker: str,
     filing_type: str,
-    s3_client,
+    output_dir: Path,
     company_name: str = "DataThon2025",
     email: str = "user@example.com",
     limit: int = 1
 ) -> Dict[str, Any]:
     """
-    Download a filing and upload directly to S3.
+    Download a filing and save to local disk.
     
     Args:
         ticker: Stock ticker symbol
         filing_type: Filing type ('10-K', '10-Q', '8-K')
-        s3_client: S3Client instance
+        output_dir: Base output directory (files saved to output_dir/filings/{ticker}/)
         company_name: Company name for SEC user-agent
         email: Email for SEC user-agent
         limit: Maximum number of filings to download (default: 1 for latest)
@@ -177,30 +174,27 @@ def download_filing_to_s3(
             # Determine file extension based on actual file
             file_ext = filing_file.suffix if filing_file.suffix else '.html'
             
-            # Generate S3 key
-            # Format: input/filings/{ticker}/{filing_date}-{filing_type}-{ticker}{ext}
-            s3_key = f"input/filings/{ticker}/{filing_date}-{filing_type.lower()}-{ticker}{file_ext}"
+            # Create output directory structure: data/filings/{ticker}/
+            ticker_output_dir = output_dir / "filings" / ticker
+            ticker_output_dir.mkdir(parents=True, exist_ok=True)
             
-            # Upload directly to S3
-            success = s3_client.write_content(file_content, s3_key)
+            # Generate filename: {filing_date}-{filing_type}-{ticker}{ext}
+            filename = f"{filing_date}-{filing_type.lower()}-{ticker}{file_ext}"
+            output_path = ticker_output_dir / filename
             
-            if success:
-                logger.info(f"[OK] Downloaded and uploaded {filing_type} for {ticker}: {s3_key}")
-                return {
-                    'ticker': ticker,
-                    'filing_type': filing_type,
-                    'filing_date': filing_date,
-                    's3_key': s3_key,
-                    'size_bytes': len(file_content),
-                    'success': True
-                }
-            else:
-                return {
-                    'ticker': ticker,
-                    'filing_type': filing_type,
-                    'success': False,
-                    'error': 'S3 upload failed'
-                }
+            # Save file locally
+            with open(output_path, 'wb') as f:
+                f.write(file_content)
+            
+            logger.info(f"[OK] Downloaded and saved {filing_type} for {ticker}: {output_path}")
+            return {
+                'ticker': ticker,
+                'filing_type': filing_type,
+                'filing_date': filing_date,
+                'local_path': str(output_path),
+                'size_bytes': len(file_content),
+                'success': True
+            }
                 
         finally:
             # Cleanup temp directory
@@ -220,7 +214,7 @@ def download_filing_to_s3(
 def download_ticker_filings(
     ticker: str,
     filing_types: List[str],
-    s3_client,
+    output_dir: Path,
     company_name: str = "DataThon2025",
     email: str = "user@example.com"
 ) -> Dict[str, Any]:
@@ -230,7 +224,7 @@ def download_ticker_filings(
     Args:
         ticker: Stock ticker symbol
         filing_types: List of filing types to download
-        s3_client: S3Client instance
+        output_dir: Base output directory
         company_name: Company name for SEC user-agent
         email: Email for SEC user-agent
         
@@ -243,10 +237,10 @@ def download_ticker_filings(
     }
     
     for filing_type in filing_types:
-        result = download_filing_to_s3(
+        result = download_filing_local(
             ticker=ticker,
             filing_type=filing_type,
-            s3_client=s3_client,
+            output_dir=output_dir,
             company_name=company_name,
             email=email,
             limit=1  # Get latest filing only
@@ -261,21 +255,18 @@ def worker_download_ticker(args):
     Worker function for multiprocessing.
     
     Args:
-        args: Tuple of (ticker, filing_types, s3_bucket, s3_region, company_name, email)
+        args: Tuple of (ticker, filing_types, output_dir, company_name, email)
         
     Returns:
         Dict with download results
     """
-    ticker, filing_types, s3_bucket, s3_region, company_name, email = args
-    
-    # Create S3 client in worker process (boto3 is thread-safe but process-safe too)
-    from src.utils.s3_client import S3Client
-    s3_client = S3Client(bucket_name=s3_bucket, region=s3_region)
+    ticker, filing_types, output_dir_str, company_name, email = args
+    output_dir = Path(output_dir_str)
     
     return download_ticker_filings(
         ticker=ticker,
         filing_types=filing_types,
-        s3_client=s3_client,
+        output_dir=output_dir,
         company_name=company_name,
         email=email
     )
@@ -286,14 +277,26 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(
-        description="Download SEC filings for S&P 500 companies and upload to S3"
+        description="Download SEC filings for companies and save locally"
+    )
+    
+    parser.add_argument(
+        '--output-dir',
+        type=str,
+        default='data',
+        help='Output directory for filings (default: data)'
+    )
+    
+    parser.add_argument(
+        '--tickers',
+        type=str,
+        help='Comma-separated list of tickers to download (e.g., "AAPL,MSFT,GOOGL")'
     )
     
     parser.add_argument(
         '--csv',
         type=str,
-        default='data/initial-dataset/2025-08-15_composition_sp500.csv',
-        help='Path to S&P 500 composition CSV'
+        help='Path to CSV file with tickers (alternative to --tickers). CSV must have a "Symbol" column.'
     )
     
     parser.add_argument(
@@ -314,7 +317,7 @@ def main():
     parser.add_argument(
         '--max-tickers',
         type=int,
-        help='Maximum number of tickers to process (for testing)'
+        help='Maximum number of tickers to process (for testing, only applies when using --csv)'
     )
     
     parser.add_argument(
@@ -333,47 +336,64 @@ def main():
     
     args = parser.parse_args()
     
-    # Load S&P 500 tickers
-    csv_path = Path(args.csv)
-    if not csv_path.exists():
-        logger.error(f"[ERROR] CSV file not found: {csv_path}")
+    # Get tickers from either --tickers argument or --csv file
+    tickers = []
+    
+    if args.tickers:
+        # Parse comma-separated tickers
+        tickers = [t.strip().upper() for t in args.tickers.split(',')]
+        tickers = [t for t in tickers if t and ' ' not in t]  # Remove empty and invalid tickers
+        logger.info(f"[INFO] Using {len(tickers)} tickers from --tickers argument: {', '.join(tickers)}")
+    
+    elif args.csv:
+        # Load tickers from CSV file
+        csv_path = Path(args.csv)
+        if not csv_path.exists():
+            logger.error(f"[ERROR] CSV file not found: {csv_path}")
+            return
+        
+        logger.info(f"[INFO] Loading tickers from {csv_path}")
+        df = pd.read_csv(csv_path)
+        
+        # Extract tickers (handle European decimal format and special cases)
+        tickers = df['Symbol'].str.strip().str.upper().tolist()
+        
+        # Fix tickers with comma issues (e.g., "BRK,B" -> "BRK.B")
+        tickers = [ticker.replace(',', '.') for ticker in tickers]
+        
+        # Remove any tickers with spaces (invalid)
+        tickers = [ticker for ticker in tickers if ' ' not in ticker and len(ticker) > 0]
+        
+        logger.info(f"[INFO] Loaded {len(tickers)} valid tickers from CSV")
+        
+        if args.max_tickers:
+            tickers = tickers[:args.max_tickers]
+            logger.info(f"[INFO] Processing first {args.max_tickers} tickers (testing mode)")
+    
+    else:
+        logger.error("[ERROR] Must provide either --tickers or --csv argument")
+        parser.print_help()
         return
     
-    logger.info(f"[INFO] Loading tickers from {csv_path}")
-    df = pd.read_csv(csv_path)
-    
-    # Extract tickers (handle European decimal format and special cases)
-    tickers = df['Symbol'].str.strip().str.upper().tolist()
-    
-    # Fix tickers with comma issues (e.g., "BRK,B" -> "BRK.B")
-    tickers = [ticker.replace(',', '.') for ticker in tickers]
-    
-    # Remove any tickers with spaces (invalid)
-    tickers = [ticker for ticker in tickers if ' ' not in ticker and len(ticker) > 0]
-    
-    logger.info(f"[INFO] Loaded {len(tickers)} valid tickers")
-    
-    if args.max_tickers:
-        tickers = tickers[:args.max_tickers]
-        logger.info(f"[INFO] Processing first {args.max_tickers} tickers (testing mode)")
+    if not tickers:
+        logger.error("[ERROR] No valid tickers found")
+        return
     
     logger.info(f"[INFO] Found {len(tickers)} tickers")
     logger.info(f"[INFO] Filing types: {args.filing_types}")
     logger.info(f"[INFO] Workers: {args.workers}")
+    logger.info(f"[INFO] Output directory: {args.output_dir}")
     
-    # Get S3 client
-    s3_client = get_s3_client()
-    if not s3_client:
-        logger.error("[ERROR] S3 client not available. Check AWS credentials.")
-        return
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Prepare arguments for workers
     worker_args = [
         (
             ticker,
             args.filing_types,
-            s3_client.bucket_name,
-            s3_client.region,
+            str(output_dir),
             args.company_name,
             args.email
         )

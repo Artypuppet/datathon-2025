@@ -4,7 +4,7 @@
 set -e  # Exit on error
 
 echo "=========================================="
-echo "Datathon 2025 Local Development Setup"
+echo "Risk Scorer 2025 Local Development Setup"
 echo "=========================================="
 echo ""
 
@@ -20,12 +20,12 @@ echo "[OK] Conda found"
 # Create environment
 echo ""
 echo "Creating local development environment..."
-if conda env list | grep -q "datathon-local"; then
-    echo "[WARN] Environment 'datathon-local' already exists."
+if conda env list | grep -q "risk-scorer-local"; then
+    echo "[WARN] Environment 'risk-scorer-local' already exists."
     read -p "Remove and recreate? (y/n) " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        conda env remove -n datathon-local -y
+        conda env remove -n risk-scorer-local -y
         conda env create -f environment-local.yml
     fi
 else
@@ -39,7 +39,7 @@ echo "[OK] Environment created"
 echo ""
 echo "Downloading spaCy model..."
 source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate datathon-local
+conda activate risk-scorer-local
 # Use direct pip install to avoid 404 errors with spacy download command
 pip install https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 
@@ -154,7 +154,7 @@ echo "[SUCCESS] Setup Complete!"
 echo "=========================================="
 echo ""
 echo "Next steps:"
-echo "  1. Activate environment:  conda activate datathon-local"
+echo "  1. Activate environment:  conda activate risk-scorer-local"
 echo "  2. Copy sample filings:   cp data/initial-dataset/fillings/AAPL/*.html data/test-sample/filings/"
 echo "  3. Start coding!          python src/parsers/filing_parser.py"
 echo "  4. Run tests:             pytest tests/unit/"
